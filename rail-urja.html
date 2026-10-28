@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAIL URJA | Live Dashboard</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#061226;color:#edf6ff;font-family:Arial,sans-serif}
+header{padding:22px;background:#0c2140;border-bottom:1px solid #23496e}
+h1{margin:0;color:#7dd3fc;font-size:clamp(24px,4vw,38px)}
+header p{margin:8px 0 0;color:#a8c4df}
+main{padding:18px;max-width:1500px;margin:auto}
+button{border:0;border-radius:10px;padding:13px 18px;background:#38bdf8;color:#04152a;font-weight:bold;font-size:15px;cursor:pointer}
+#status{display:inline-block;margin-left:12px;color:#93c5fd;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;margin-top:20px}
+.card{min-height:150px;background:linear-gradient(145deg,#102849,#0b1d36);border:1px solid #23496e;border-radius:17px;padding:20px}
+.card h2{font-size:15px;color:#b5cee8;margin:0}
+.value{font-size:clamp(28px,4vw,42px);font-weight:bold;margin:18px 0 8px;overflow-wrap:anywhere}
+.unit{font-size:16px;color:#93c5fd}
+.note{font-size:12px;color:#8eabc9}
+.section{margin-top:28px;color:#7dd3fc;font-size:18px}
+footer{padding:25px;color:#8eabc9;font-size:12px;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ RAIL URJA</h1>
+  <p>Smart Railway Energy Harvesting · Live Sensor Dashboard</p>
+</header>
+<main>
+  <button id="connect">CONNECT ESP32</button>
+  <span id="status">● Disconnected</span>
+
+  <div class="section">ENERGY MONITORING</div>
+  <div class="grid">
+    <div class="card"><h2>Generator Voltage</h2><div class="value" id="voltage">-- <span class="unit">V</span></div><div class="note">Live sensor data</div></div>
+    <div class="card"><h2>Current</h2><div class="value" id="current">-- <span class="unit">A</span></div><div class="note">Requires current sensor data</div></div>
+    <div class="card"><h2>Power</h2><div class="value" id="power">-- <span class="unit">W</span></div><div class="note">Voltage × current</div></div>
+    <div class="card"><h2>Energy</h2><div class="value" id="energy">-- <span class="unit">Wh</span></div><div class="note">Calculated from measured power over time</div></div>
+  </div>
+
+  <div class="section">SENSOR STATUS</div>
+  <div class="grid">
+    <div class="card"><h2>Vibration Sensor</h2><div class="value" id="vibration">--</div><div class="note">Waiting for sensor data</div></div>
+    <div class="card"><h2>IR Sensor 1</h2><div class="value" id="ir1">--</div><div class="note">Object detection status</div></div>
+    <div class="card"><h2>IR Sensor 2</h2><div class="value" id="ir2">--</div><div class="note">Object detection status</div></div>
+    <div class="card"><h2>Temperature</h2><div class="value" id="temperature">-- <span class="unit">°C</span></div><div class="note">Live temperature sensor</div></div>
+    <div class="card"><h2>Battery Voltage</h2><div class="value" id="battery">-- <span class="unit">V</span></div><div class="note">Battery divider input</div></div>
+    <div class="card"><h2>Last Bluetooth Data</h2><div class="value" style="font-size:18px" id="raw">Waiting…</div><div class="note">Latest packet received from ESP32</div></div>
+  </div>
+</main>
+<footer>
+Readings appear only when the ESP32 transmits the corresponding real sensor data.
+This dashboard cannot infer current, temperature, battery voltage, or other sensor values from voltage alone.
+The ESP32 firmware and Bluetooth data format must match this app.
+</footer>
+<script>
+const SERVICE="6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const CHAR="6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const $=id=>document.getElementById(id);
+let device;
+
+$("connect").onclick=async()=>{
+ try{
+  if(!navigator.bluetooth)throw Error("Open this page in supported Chrome over HTTPS.");
+  $("status").textContent="● Select RAIL-URJA…";
+  device=await navigator.bluetooth.requestDevice({
+   filters:[{name:"RAIL-URJA"}],optionalServices:[SERVICE]
+  });
+  device.addEventListener("gattserverdisconnected",()=>{
+   $("status").textContent="● Disconnected";
+  });
+  const server=await device.gatt.connect();
+  const service=await server.getPrimaryService(SERVICE);
+  const characteristic=await service.getCharacteristic(CHAR);
+  await characteristic.startNotifications();
+  characteristic.addEventListener("characteristicvaluechanged",event=>{
+   const data=new TextDecoder().decode(event.target.value).trim();
+   $("raw").textContent=data;
+   const values=data.split(",").map(Number);
+   // Compatible with the simple ESP32 example: input voltage, ADC voltage.
+   if(values.length>=2 && values.every(Number.isFinite)){
+    $("voltage").innerHTML=values[0].toFixed(2)+' <span class="unit">V</span>';
+    $("status").textContent="● Connected · Live data";
+   }
+  });
+  $("status").textContent="● Connected · Waiting for data";
+ }catch(e){$("status").textContent="● "+e.message;}
+};
+</script>
+</body>
+</html>
